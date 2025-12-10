@@ -989,7 +989,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
                 "run_start_date=%s, run_end_date=%s, "
                 "run_duration=%s, state=%s, executor=%s, executor_state=%s, try_number=%s, max_tries=%s, "
                 "pool=%s, queue=%s, priority_weight=%d, operator=%s, queued_dttm=%s, scheduled_dttm=%s,"
-                "queued_by_job_id=%s, pid=%s"
+                "queued_by_job_id=%s, pid=%s, updated_at=%s, id=%s"
             )
             cls.logger().info(
                 msg,
@@ -1013,6 +1013,8 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
                 ti.scheduled_dttm,
                 ti.queued_by_job_id,
                 ti.pid,
+                ti.updated_at,
+                ti.id
             )
 
             if (active_ti_span := cls.active_spans.get("ti:" + str(ti.id))) is not None:
