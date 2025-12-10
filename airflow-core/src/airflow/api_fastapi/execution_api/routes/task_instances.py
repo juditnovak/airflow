@@ -693,7 +693,7 @@ def ti_heartbeat(
 
     # Update the last heartbeat time!
     session.execute(update(TI).where(TI.id == ti_id_str).values(last_heartbeat_at=timezone.utcnow()))
-    log.debug("Heartbeat updated", state=previous_state)
+    log.info("Heartbeat updated", state=previous_state)
 
 
 @ti_id_router.put(
