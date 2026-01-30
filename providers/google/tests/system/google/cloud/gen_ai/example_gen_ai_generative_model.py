@@ -26,7 +26,6 @@ import os
 from datetime import datetime
 
 import requests
-from vertexai.preview.evaluation import MetricPromptTemplateExamples
 
 try:
     from airflow.sdk import task
@@ -66,7 +65,7 @@ def _get_actual_models(key) -> dict[str, str]:
     }
     try:
         response = requests.get(
-            "https://generativelanguage.googleapis.com/v1/models",
+            "https://generativelanguage.googleapis.com/v1beta/models",
             {"key": key},
             timeout=10,
         )
@@ -80,7 +79,7 @@ def _get_actual_models(key) -> dict[str, str]:
         try:
             model_name = model["name"].split("/")[-1]
             splited_model_name = model_name.split("-")
-            if not models["text-embedding"] and ("text" in model_name and "embedding" in model_name):
+            if not models["text-embedding"] and ("gemini" in model_name and "embedding" in model_name):
                 models["text-embedding"] = model_name
             elif (
                 models["text-embedding"]
@@ -166,17 +165,30 @@ EVAL_DATASET = {
         "Baking a decadent chocolate cake requires creaming butter and sugar, beating in eggs and alternating dry ingredients with buttermilk before baking until done.",
     ],
 }
-METRICS = [
-    MetricPromptTemplateExamples.Pointwise.SUMMARIZATION_QUALITY,
-    MetricPromptTemplateExamples.Pointwise.GROUNDEDNESS,
-    MetricPromptTemplateExamples.Pointwise.VERBOSITY,
-    MetricPromptTemplateExamples.Pointwise.INSTRUCTION_FOLLOWING,
-    "exact_match",
-    "bleu",
-    "rouge_1",
-    "rouge_2",
-    "rouge_l_sum",
-]
+
+
+def _get_metrics():
+    """
+    Lazily import and return the metrics list.
+
+    This avoids slow imports during DAG parsing by deferring the import
+    until the operator is actually created.
+    """
+    from vertexai.preview.evaluation import MetricPromptTemplateExamples
+
+    return [
+        MetricPromptTemplateExamples.Pointwise.SUMMARIZATION_QUALITY,
+        MetricPromptTemplateExamples.Pointwise.GROUNDEDNESS,
+        MetricPromptTemplateExamples.Pointwise.VERBOSITY,
+        MetricPromptTemplateExamples.Pointwise.INSTRUCTION_FOLLOWING,
+        "exact_match",
+        "bleu",
+        "rouge_1",
+        "rouge_2",
+        "rouge_l_sum",
+    ]
+
+
 EXPERIMENT_NAME = f"eval-test-experiment-airflow-operator-{ENV_ID}".replace("_", "-")
 EXPERIMENT_RUN_NAME = f"eval-experiment-airflow-operator-run-{ENV_ID}".replace("_", "-")
 PROMPT_TEMPLATE = "{instruction}. Article: {context}. Summary:"
@@ -281,7 +293,7 @@ with DAG(
         location=REGION,
         pretrained_model=MULTIMODAL_MODEL,
         eval_dataset=EVAL_DATASET,
-        metrics=METRICS,
+        metrics=_get_metrics(),
         experiment_name=EXPERIMENT_NAME,
         experiment_run_name=EXPERIMENT_RUN_NAME,
         prompt_template=PROMPT_TEMPLATE,

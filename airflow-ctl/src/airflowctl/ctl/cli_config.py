@@ -74,13 +74,11 @@ def safe_call_command(function: Callable, args: Iterable[Arg]) -> None:
 
     try:
         function(args)
-    except AirflowCtlCredentialNotFoundException as e:
-        rich.print(f"command failed due to {e}")
-        sys.exit(1)
-    except AirflowCtlConnectionException as e:
-        rich.print(f"command failed due to {e}")
-        sys.exit(1)
-    except AirflowCtlNotFoundException as e:
+    except (
+        AirflowCtlCredentialNotFoundException,
+        AirflowCtlConnectionException,
+        AirflowCtlNotFoundException,
+    ) as e:
         rich.print(f"command failed due to {e}")
         sys.exit(1)
     except (httpx.RemoteProtocolError, httpx.ReadError) as e:
@@ -202,8 +200,7 @@ class Password(argparse.Action):
 ARG_FILE = Arg(
     flags=("file",),
     metavar="FILEPATH",
-    help="File path to read from or write to. "
-    "For import commands, it is a file to read from. For export commands, it is a file to write to.",
+    help="File path to read from for import commands.",
 )
 ARG_OUTPUT = Arg(
     (
@@ -254,9 +251,8 @@ ARG_AUTH_PASSWORD = Arg(
 
 # Dag Commands Args
 ARG_DAG_ID = Arg(
-    flags=("--dag-id",),
+    flags=("dag_id",),
     type=str,
-    dest="dag_id",
     help="The DAG ID of the DAG to pause or unpause",
 )
 
@@ -385,7 +381,7 @@ class CommandFactory:
         # Exclude parameters that are not needed for CLI from datamodels
         self.excluded_parameters = ["schema_"]
         # This list is used to determine if the command/operation needs to output data
-        self.output_command_list = ["list", "get", "create", "delete", "update", "trigger"]
+        self.output_command_list = ["list", "get", "create", "delete", "update", "trigger", "add", "edit"]
         self.exclude_operation_names = ["LoginOperations", "VersionOperations", "BaseOperations"]
         self.exclude_method_names = [
             "error",
@@ -625,6 +621,16 @@ class CommandFactory:
 
             if datamodel:
                 if datamodel_param_name:
+                    # Special handling for TriggerDAGRunPostBody: default logical_date to now
+                    # This matches the Airflow UI behavior where the form pre-fills with current time
+                    if (
+                        datamodel.__name__ == "TriggerDAGRunPostBody"
+                        and "logical_date" in method_params[datamodel_param_name]
+                        and method_params[datamodel_param_name]["logical_date"] is None
+                    ):
+                        method_params[datamodel_param_name]["logical_date"] = datetime.datetime.now(
+                            datetime.timezone.utc
+                        )
                     method_params[datamodel_param_name] = datamodel.model_validate(
                         method_params[datamodel_param_name]
                     )
@@ -804,9 +810,7 @@ CONFIG_COMMANDS = (
 CONNECTION_COMMANDS = (
     ActionCommand(
         name="import",
-        help="Import connections from a file. "
-        "This feature is compatible with airflow CLI `airflow connections export a.json` command. "
-        "Export it from `airflow CLI` and import it securely via this command.",
+        help="Import connections from a file exported with local CLI.",
         func=lazy_load_command("airflowctl.ctl.commands.connection_command.import_"),
         args=(Arg(flags=("file",), metavar="FILEPATH", help="Connections JSON file"),),
     ),
@@ -854,15 +858,9 @@ POOL_COMMANDS = (
 VARIABLE_COMMANDS = (
     ActionCommand(
         name="import",
-        help="Import variables",
+        help="Import variables from a file exported with local CLI.",
         func=lazy_load_command("airflowctl.ctl.commands.variable_command.import_"),
         args=(ARG_FILE, ARG_VARIABLE_ACTION_ON_EXISTING_KEY),
-    ),
-    ActionCommand(
-        name="export",
-        help="Export all variables",
-        func=lazy_load_command("airflowctl.ctl.commands.variable_command.export"),
-        args=(ARG_FILE,),
     ),
 )
 
